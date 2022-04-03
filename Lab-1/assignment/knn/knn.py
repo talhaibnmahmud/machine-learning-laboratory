@@ -1,5 +1,6 @@
 """KNN Implementation using KDTree for point cloud data"""
 
+import heapq
 import math
 
 from operator import itemgetter
@@ -39,6 +40,21 @@ class KDTree:
 
     def __repr__(self):
         return pformat(self.root)
+    
+    def __iter__(self):
+        """Iterate through the points in the tree"""
+        if not self.root:
+            return
+
+        def traverse(node: Node | None):
+            if not node:
+                return None
+
+            traverse(node.left)
+            yield node.point
+            traverse(node.right)
+
+        yield from traverse(self.root)
 
     def build_tree(self, points: list[Point], depth: int) -> Node | None:
         """ Create a K-Dimensional Tree"""
@@ -61,37 +77,34 @@ class KDTree:
 
     def get_knn(self, point: Point, k: int):
         """ Find the k-nearest neighbors"""
-        if not self.root:
-            return None
 
-        best: list[BestType] = []
-        depth = 0
-
-        # find the k nearest neighbors
-        def traverse(
-            node: Node | None,
-            best: list[BestType],
-            point: Point, depth: int
-        ) -> list[BestType]:
+        def get_nearest(
+            node: Node | None, 
+            point: Point, 
+            k:int, 
+            heap: list[tuple[float, Point]], 
+            i: int=0, 
+            tiebreaker: int=1
+        ) -> list[tuple[float, Point]]:
             if not node:
-                return best
+                return heap
 
-            axis = depth % self.k
+            axis = i % self.k
             distance = euclidean_distance(point, node.point)
 
-            if len(best) < k:
-                best.append(Best(point=node.point, distance=distance))
-                best.sort(key=itemgetter(1))
-                if len(best) > k:
-                    best.pop()
+            if len(heap) < k:
+                heapq.heappush(heap, (distance, node.point))
+            elif distance < heap[0][0]:
+                heapq.heappushpop(heap, (distance, node.point))
 
             if point[axis] < node.point[axis]:
-                best = traverse(node.left, best, point, depth + 1)
+                get_nearest(node.left, point, k, heap, i + 1, tiebreaker)
             else:
-                best = traverse(node.right, best, point, depth + 1)
-            return best
+                get_nearest(node.right, point, k, heap, i + 1, tiebreaker)
 
-        return traverse(self.root, best, point, depth)
+            return heap
+        
+        return heapq.nsmallest(k, get_nearest(self.root, point, k, []))
 
     def get_nearest(self, point: Point) -> BestType:
         """Recursively search through the k-d tree to find the
@@ -130,13 +143,17 @@ class KNN:
         self.x_train = None
         self.y_train = None
 
-    def fit(self):
+    def fit(self, x_train: PointList, y_train: PointList) -> None:
         """Train Model"""
-        pass
+        self.x_train = KDTree(x_train)
+        self.y_train = y_train
 
-    def predict(self):
+    def predict(self, x_test: PointList):
         """Predict Result"""
-        pass
+        if not self.x_train:
+            raise ValueError("Model not trained")
+        
+        return [self.x_train.get_knn(x, self.k) for x in x_test]
 
 
 def main():
@@ -147,6 +164,10 @@ def main():
     # print(tree)
     # print(tree.get_nearest((10, 1)))
     print(tree.get_knn((2, 2), 3))
+
+    knn = KNN(3)
+    knn.fit(point_list, point_list)
+    print(knn.predict([(2, 2)]))
 
 
 if __name__ == '__main__':
