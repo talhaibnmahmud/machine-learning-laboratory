@@ -1,2 +1,2 @@
-from .knn import KNN
-from .simple_knn import SimpleKNN
+from .knn import *
+from .simple_knn import *
